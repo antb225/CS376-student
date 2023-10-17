@@ -20,6 +20,8 @@ public class Spawner : MonoBehaviour
     /// </summary>
     public float FreeRadius = 10;
 
+    float NextSpawn = 0;
+
     /// <summary>
     /// Check if we need to spawn and if so, do so.
     /// </summary>
@@ -27,5 +29,10 @@ public class Spawner : MonoBehaviour
     void Update()
     {
         // TODO
+        if (Time.time > NextSpawn)
+        {
+            NextSpawn = Time.time + SpawnInterval;
+            Instantiate(Prefab, SpawnUtilities.RandomFreePoint(FreeRadius), Quaternion.identity);
+        }
     }
 }

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.PlayerLoop;
 
 /// <summary>
 /// Control the player on screen
@@ -10,6 +11,8 @@ public class Player : MonoBehaviour
     /// Prefab for the orbs we will shoot
     /// </summary>
     public GameObject OrbPrefab;
+
+    public Rigidbody2D PlayerRigidbody;
 
     /// <summary>
     /// How fast our engines can accelerate us
@@ -26,6 +29,15 @@ public class Player : MonoBehaviour
     /// </summary>
     public float OrbVelocity = 10;
 
+    public int MaxOrbs = 10;
+    int orbsShot = 0;
+    int FixedUpdateCalls = 0;
+
+    private void Start()
+    {
+        PlayerRigidbody = GetComponent<Rigidbody2D>();
+    }
+
     /// <summary>
     /// Handle moving and firing.
     /// Called by Uniity every 1/50th of a second, regardless of the graphics card's frame rate
@@ -35,6 +47,15 @@ public class Player : MonoBehaviour
     {
         Manoeuvre();
         MaybeFire();
+        if (FixedUpdateCalls < 50)
+        {
+            FixedUpdateCalls++;
+        }
+        else
+        {
+            FixedUpdateCalls = 0;
+            orbsShot = 0;
+        }
     }
 
     /// <summary>
@@ -44,6 +65,15 @@ public class Player : MonoBehaviour
     void MaybeFire()
     {
         // TODO
+        if (Input.GetAxis("Fire") != 0)
+        {
+            if (orbsShot < MaxOrbs)
+            {
+                FireOrb();
+                orbsShot++;
+            }
+        }
+        
     }
 
     /// <summary>
@@ -54,6 +84,9 @@ public class Player : MonoBehaviour
     private void FireOrb()
     {
         // TODO
+        GameObject newOrb = Instantiate(OrbPrefab, transform.position + transform.right, Quaternion.identity);
+        Rigidbody2D newOrbRB = newOrb.GetComponent<Rigidbody2D>();
+        newOrbRB.velocity = transform.right * OrbVelocity;
     }
 
     /// <summary>
@@ -65,6 +98,8 @@ public class Player : MonoBehaviour
     void Manoeuvre()
     {
         // TODO
+        PlayerRigidbody.angularVelocity = Input.GetAxis("Rotate") * RotateSpeed;
+        PlayerRigidbody.AddForce(new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical")) * EnginePower);
     }
 
     /// <summary>
