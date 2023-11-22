@@ -1,5 +1,7 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.VFX;
 
 /// <summary>
 /// Control code for the the player's game object.
@@ -28,15 +30,15 @@ public class PlayerControl : MonoBehaviour {
     /// <summary>
     /// How far the plane can rotate about the Z axis
     /// </summary>
-    public float RollRange = 45;
+    public float RollRange = 45f;
     /// <summary>
     /// How fast the plane yaws for a given degree of roll.
     /// </summary>
-    public float RotationalSpeed = 5f;
+    public float RotationalSpeed = 0.05f;
     /// <summary>
     /// Thrust generated when the throttle is pulled back all the way.
     /// </summary>
-    public float MaximumThrust = 20f;
+    public float MaximumThrust = 30f;
 
     /// <summary>
     /// Text element for displaying status information
@@ -59,6 +61,27 @@ public class PlayerControl : MonoBehaviour {
     /// </summary>
     const int UpdraftLayerMask = 1 << 8;
 
+    // My values (mostly for feel and control)
+    [Header("Tuning Variables")]
+    /// <summary>
+    /// How fast the plane rolls
+    /// </summary>
+    public float rollSpeed = 10f;
+
+    /// <summary>
+    /// How fast the plane pitches
+    /// </summary>
+    public float pitchSpeed = 20f;
+
+    /// <summary>
+    /// How strongly the rotation changes with each frame
+    /// </summary>
+    public float lerpWeight = 0.01f;
+
+    /// <summary>
+    /// Player size radius for updraft detection
+    /// </summary>
+    public float radius = 1f;
 
     #region Internal flight state
     /// <summary>
@@ -111,5 +134,81 @@ public class PlayerControl : MonoBehaviour {
             playerRB.velocity.magnitude,
             transform.position.y,
             thrust);
+    }
+
+    private void FixedUpdate()
+    {
+        // Get the roll input
+        float inHori = Input.GetAxis("Horizontal") * rollSpeed;
+        float currRoll = playerRB.transform.eulerAngles.z;
+        currRoll = (currRoll > 180) ? currRoll - 360f : currRoll;
+        float newRoll = currRoll + inHori;
+        newRoll = Mathf.Clamp(newRoll, -1f * RollRange, RollRange);
+
+        // Get the pitch input
+        float inVert = Input.GetAxis("Vertical") * pitchSpeed;
+        float currPitch = playerRB.transform.eulerAngles.x;
+        currPitch = (currPitch > 180) ? currPitch - 360f : currPitch;
+        float newPitch = currPitch - inVert;
+        newPitch = Mathf.Clamp(newPitch, -1f * PitchRange, PitchRange);
+
+        // Set the smoothed versions of the roll, pitch and yaw
+        float yaw = playerRB.transform.eulerAngles.y - newRoll * RotationalSpeed;
+        float roll = Mathf.Lerp(currRoll, newRoll, lerpWeight);
+        float pitch = Mathf.Lerp(currPitch, newPitch, lerpWeight);
+
+        // Apply the new rotation
+        playerRB.MoveRotation(Quaternion.Euler(pitch, yaw, roll));
+
+        // Set the thrust of the plane in the forward direction
+        thrust = Mathf.Clamp(Input.GetAxis("Thrust") * MaximumThrust, 0f, MaximumThrust);
+        playerRB.AddForce(playerRB.transform.forward * thrust, ForceMode.Force);
+
+        // Calculate wind velocities
+        float vf = -1 * Vector3.Dot(playerRB.velocity, playerRB.transform.forward);
+        float vu = -1 * Vector3.Dot(playerRB.velocity, playerRB.transform.up);
+        Collider[] overlaps = Physics.OverlapSphere(transform.position, radius, UpdraftLayerMask);
+        foreach (Collider col in overlaps)
+        {
+            Updraft updraftScript = col.GetComponent<Updraft>();
+            if (updraftScript != null)
+            {
+                vf += Vector3.Dot(updraftScript.WindVelocity, playerRB.transform.forward);
+                vu += Vector3.Dot(updraftScript.WindVelocity, playerRB.transform.up);
+            }
+        }
+
+        // Calculate and apply lift
+        Vector3 lift = LiftCoefficient * vf * vf * playerRB.transform.up;
+        playerRB.AddForce(lift, ForceMode.Force);
+
+        // Calculate and apply forward drag
+        Vector3 forwardDrag = ForwardDragCoefficient * vf * vf * Mathf.Sign(vf) * playerRB.transform.forward;
+        playerRB.AddForce(forwardDrag, ForceMode.Force);
+
+        // Calculate and apply upward drag
+        Vector3 upwardDrag = VerticalDragCoefficient * vu * vu * Mathf.Sign(vu) * playerRB.transform.up;
+        playerRB.AddForce(upwardDrag, ForceMode.Force);
+
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        LandingPlatform landingPad = collision.transform.GetComponent<LandingPlatform>();
+        if (landingPad != null)
+        {
+            if (playerRB.velocity.magnitude < landingPad.MaxLandingSpeed)
+            {
+                OnGameOver(true);
+            }
+            else
+            {
+                OnGameOver(false);
+            }
+        }
+        else
+        {
+            OnGameOver(false);
+        }
     }
 }
